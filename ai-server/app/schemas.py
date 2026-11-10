@@ -22,12 +22,25 @@ class PreviousAnswer(_Base):
         return "" if v is None else v
 
 
+# 같은 order를 쉬운 말로 다시 물을 때 보내는 직전 질문과 답변
+class RetryAttempt(_Base):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str | None = Field(default="", max_length=3000)
+
+    @field_validator("answer", mode="before")
+    @classmethod
+    def _none_to_empty(cls, v):
+        return "" if v is None else v
+
+
 class QuestionRequest(_Base):
     emotion: Emotion
     content: str = Field(min_length=1, max_length=5000, description="사용자가 수정/확인한 일기 텍스트")
     order: int = Field(ge=1, le=3)
     type: QuestionType
     previous_answers: list[PreviousAnswer] = Field(default_factory=list, alias="previousAnswers")
+    # 값이 있으면 이번 order 질문을 쉬운 말로 다시 묻기
+    retry: RetryAttempt | None = None
 
     @model_validator(mode="after")
     def _check_order_and_history(self):
@@ -54,6 +67,14 @@ class QuestionResponse(_Base):
     type: QuestionType
     content: str
     is_fallback: bool = Field(alias="isFallback")
+
+# 답변 확인
+class AnswerCheckRequest(_Base):
+    answer: str | None = Field(default="", max_length=3000)
+
+
+class AnswerCheckResponse(_Base):
+    informative: bool
 
 # 감정 리포트
 class DistributionItem(_Base):

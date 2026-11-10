@@ -27,6 +27,22 @@ BANNED_WORDS: tuple[str, ...] = (
     "니 탓",
 )
 
+# 안전 모드에서 금지하는 질문 (가해자 관점, 아이 탓, 세부 내용 캐묻기, 참으라는 말)
+_PERSON = r"(아빠|엄마|아버지|어머니|부모님?|친구|형|누나|언니|오빠|동생|선생님|삼촌|이모|고모|할머니|할아버지|그\s*사람|그\s*아이|상대)"
+RISK_BANNED: tuple[tuple[re.Pattern, str], ...] = (
+    (re.compile(_PERSON + r"[^?]{0,8}(왜|어떤\s*마음|무슨\s*마음|어떤\s*기분|어떤\s*생각|무슨\s*생각)"), "상대의 마음이나 이유를 묻는 질문"),
+    (re.compile(r"왜\s*그랬|했길래|네가\s*(뭘|무엇을|어떻게)\s*했"), "아이 탓으로 돌릴 수 있는 질문"),
+    (re.compile(r"잘못|나쁜\s*(행동|사람|짓)|나빴|나쁘다"), "잘잘못을 판단하는 표현"),
+    (re.compile(r"때려|때렸|때린|맞아서|맞았을|괴롭혀|괴롭힌|따돌"), "사건을 사실처럼 되풀이하는 표현"),
+    (re.compile(r"정말이야|진짜야|사실이야|거짓말"), "아이의 말을 의심하는 표현"),
+    (re.compile(r"자세히|몇\s*번|언제부터|어떻게\s*(때|맞)"), "사건의 세부 내용을 캐묻는 질문"),
+    (re.compile(r"참아야|참을\s*수|화해|용서|이해해\s*(줄|볼)"), "참거나 상대를 이해하라는 질문"),
+)
+
+_PARENT = re.compile(r"엄마|아빠|부모")
+_HELP = re.compile(r"도와|도움|말해|말할|이야기해|이야기할")
+_OTHER_ADULT = re.compile(r"선생님|어른|상담|다른\s*사람")
+
 # 구체적인 장면으로 보기 어려운 흔한 낱말 (앞 두 글자 기준)
 GENERIC_PREFIXES: frozenset[str] = frozenset(
     """
@@ -72,7 +88,15 @@ def clean_question(text: str) -> str:
 # 질문 규칙 검사, 위반 시 InvalidOutputError 발생
 # source_text: 일기 본문 + 앞선 답변, 아이가 직접 쓴 낱말은 금지어여도 허용
 # diary: 일기 본문, 질문에 장면 낱말이 없으면 위반 (한국어 낱말이 없는 일기는 검사 생략)
-def validate_question(text: str, source_text: str = "", diary: str = "") -> str:
+# risk: 안전 모드, 장면 낱말 검사 대신 안전 원칙 검사
+# previous_question: 다시 묻기일 때 직전 질문, 똑같이 되풀이하면 위반
+def validate_question(
+    text: str,
+    source_text: str = "",
+    diary: str = "",
+    risk: bool = False,
+    previous_question: str | None = None,
+) -> str:
     question = clean_question(text)
 
     if "\n" in question or "\r" in question:
@@ -94,6 +118,17 @@ def validate_question(text: str, source_text: str = "", diary: str = "") -> str:
     for word in BANNED_WORDS:
         if word in question and word not in source_text:
             raise InvalidOutputError(f"아이에게 부적절한 표현 '{word}' 사용")
+
+    if previous_question is not None and question == clean_question(previous_question):
+        raise InvalidOutputError("방금 질문을 그대로 되풀이함. 더 쉬운 말로 바꿔 물을 것")
+
+    if risk:
+        for pattern, reason in RISK_BANNED:
+            if pattern.search(question):
+                raise InvalidOutputError(f"안전 모드 위반: {reason}")
+        if _PARENT.search(question) and _HELP.search(question) and not _OTHER_ADULT.search(question):
+            raise InvalidOutputError("안전 모드 위반: 도움 요청 대상을 부모로만 정함, 선생님 등 다른 어른도 함께 제시할 것")
+        return question
 
     keys = scene_keys(diary)
     if keys and not any(key in question for key in keys):

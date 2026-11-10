@@ -13,6 +13,7 @@ load_dotenv()
 from app.config import Settings  # noqa: E402
 from app.domain import ORDER_TO_TYPE  # noqa: E402
 from app.llm import OpenAILLMClient  # noqa: E402
+from app.question.answers import is_uninformative  # noqa: E402
 from app.question.service import QuestionService  # noqa: E402
 from app.report.service import ReportService  # noqa: E402
 from app.schemas import QuestionRequest, ReportRequest  # noqa: E402
@@ -46,15 +47,22 @@ def run_questions(settings: Settings) -> None:
 
     previous: list[dict] = []
     for order in (1, 2, 3):
-        request = QuestionRequest.model_validate(
-            {"emotion": emotion, "content": content, "order": order,
-             "type": ORDER_TO_TYPE[order].value, "previousAnswers": previous}
-        )
-        result = service.generate(request)
+        body = {"emotion": emotion, "content": content, "order": order,
+                "type": ORDER_TO_TYPE[order].value, "previousAnswers": previous}
+        result = service.generate(QuestionRequest.model_validate(body))
         tag = " (기본 질문)" if result.is_fallback else ""
-        print(f"\n[질문 {order} · {result.type.value}]{tag} {result.content}")
-        answer = input("답변> ")
-        previous.append({"order": order, "type": result.type.value, "question": result.content, "answer": answer})
+        print(f"\n[질문 {order}, {result.type.value}]{tag} {result.content}")
+        question, answer = result.content, input("답변> ")
+
+        # 빈 답변이나 몰라요면 같은 질문을 쉬운 말로 한 번만 다시 묻기
+        if is_uninformative(answer):
+            body["retry"] = {"question": question, "answer": answer}
+            result = service.generate(QuestionRequest.model_validate(body))
+            tag = " (기본 질문)" if result.is_fallback else ""
+            print(f"[다시 묻기]{tag} {result.content}")
+            question, answer = result.content, input("답변> ")
+
+        previous.append({"order": order, "type": result.type.value, "question": question, "answer": answer})
 
 
 def run_report(settings: Settings) -> None:

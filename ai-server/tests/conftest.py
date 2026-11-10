@@ -19,6 +19,8 @@ class FakeLLM:
         item = self.outputs.pop(0)
         if isinstance(item, Exception):
             raise item
+        if "risk" in output_model.model_fields and "risk" not in item:
+            item = {"risk": False, **item}
         return output_model(**item)
 
 

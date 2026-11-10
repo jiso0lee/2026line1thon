@@ -8,9 +8,12 @@ from fastapi.responses import JSONResponse
 from app.config import Settings
 from app.errors import ReportGenerationError
 from app.llm import LLMClient, OpenAILLMClient
+from app.question.answers import is_uninformative
 from app.question.service import QuestionService
 from app.report.service import ReportService
 from app.schemas import (
+    AnswerCheckRequest,
+    AnswerCheckResponse,
     ErrorResponse,
     QuestionRequest,
     QuestionResponse,
@@ -91,6 +94,17 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None) -
     )
     def generate_question(request: QuestionRequest) -> QuestionResponse:
         return question_service.generate(request)
+
+    @app.post(
+        "/api/diary-answers/check",
+        response_model=AnswerCheckResponse,
+        tags=["question"],
+        summary="답변에 정보가 있는지 확인 (빈 답변, 몰라요 판별)",
+        responses={401: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+        dependencies=[Depends(verify_api_key)],
+    )
+    def check_answer(request: AnswerCheckRequest) -> AnswerCheckResponse:
+        return AnswerCheckResponse(informative=not is_uninformative(request.answer))
 
     @app.post(
         "/api/emotion-reports/generate",
