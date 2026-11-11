@@ -1,4 +1,4 @@
-from app.domain import EMOTION_MIND, EMOTION_WHEN, Emotion, QuestionType
+from app.domain import EMOTION_MIND, Emotion, QuestionType
 
 
 # 안전 모드 기본 질문 (잘잘못 판단 금지, 세부 내용 캐묻지 않기, 부모 외 어른도 제시)
@@ -25,8 +25,9 @@ def fallback_question(question_type: QuestionType, emotion: Emotion, risk: bool 
         if question_type is QuestionType.REASON:
             return "그 일에서 어떤 순간이 가장 기억에 남니?"
         return "다음에 비슷한 일이 생기면 어떻게 하고 싶니?"
+    # 디자인 기본 문구 (백엔드 기본 문구와 동일)
     if question_type is QuestionType.EMOTION:
-        return f"{EMOTION_WHEN[emotion]} 마음속에서 어떤 느낌이 들었니?"
+        return "오늘 어떤 일이 있었나요?"
     if question_type is QuestionType.REASON:
-        return f"어떤 일 때문에 {EMOTION_MIND[emotion]}이 들었을까?"
-    return "친구가 같은 일을 겪었다면, 너는 친구에게 어떤 말을 해 주고 싶니?"
+        return "왜 그런 기분이 들었다고 생각하나요?"
+    return "친구는 그때 어떤 기분이었을까요?"

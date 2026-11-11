@@ -51,7 +51,7 @@ def test_falls_back_after_repeated_failure(make_client, question_body):
     assert res.json() == {
         "order": 2,
         "type": "REASON",
-        "content": "어떤 일 때문에 기쁜 마음이 들었을까?",
+        "content": "왜 그런 기분이 들었다고 생각하나요?",
         "isFallback": True,
     }
 

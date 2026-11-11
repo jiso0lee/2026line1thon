@@ -61,6 +61,39 @@ docker run --rm --env-file .env -p 8000:8000 saenggak-ai
 
 M 시리즈 Mac에서 만든 이미지를 x86 서버에 올릴 때는 `docker build --platform linux/amd64 -t saenggak-ai .`로 빌드해야 함
 
+컨테이너는 `PORT` 환경변수로 포트를 정함 (없으면 8000)
+
+## 배포 (Railway)
+
+AI 서버는 백엔드가 서버끼리 호출하므로 CORS 설정은 필요 없음
+
+1) https://railway.com 에 GitHub 계정으로 로그인
+2) New Project, Deploy from GitHub repo에서 `2026line1thon` 레포 선택
+3) 서비스 Settings의 Root Directory를 `ai-server`로 설정 (Dockerfile 자동 인식)
+4) Variables에 환경변수 입력
+   - `OPENAI_API_KEY`: OpenAI 키
+   - `AI_API_KEY`: 백엔드와 공유할 임의의 긴 문자열 (공개 주소라서 설정 권장)
+   - 나머지는 기본값 사용, `PORT`는 Railway가 자동으로 넣음
+5) Settings, Networking에서 Generate Domain으로 공개 주소 발급
+6) Settings, Deploy에서 Healthcheck Path를 `/health`로 설정
+7) `https://발급주소/health`에서 `{"status":"ok","llm":"configured"}`가 나오면 완료
+
+`AI_API_KEY` 만들기
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+배포 후 확인
+
+```bash
+curl -X POST https://발급주소/api/diary-answers/check \
+  -H "Content-Type: application/json" -H "X-API-Key: 설정한키" \
+  -d '{"answer": "몰라요"}'
+```
+
+`{"informative":false}`가 나오면 정상
+
 ## BE가 알아야 할 응답 규칙
 
 ### 질문 생성
@@ -128,13 +161,13 @@ M 시리즈 Mac에서 만든 이미지를 x86 서버에 올릴 때는 `docker bu
 | 2 (REASON) | 이유를 묻지 않고, 아이가 고른 감정을 인정하며 필요한 도움을 물음 |
 | 3 (PERSPECTIVE) | 어른에게 말해도 된다고 안내한 뒤 떠오르는 안전한 어른이 있는지 부담 없이 물음 |
 
-기본 질문 (디자인 기본 문구와 맞추기로 함, 디자인 문구를 받으면 아래 문구를 교체할 예정)
+기본 질문 (디자인 기본 문구, 백엔드 기본 문구와 동일)
 
-| type | 기본 질문 (`{감정}`은 선택한 감정에 맞게 바뀜) |
+| type | 기본 질문 |
 | --- | --- |
-| EMOTION | `{기뻤을 때}` 마음속에서 어떤 느낌이 들었니? |
-| REASON | 어떤 일 때문에 `{기쁜 마음}`이 들었을까? |
-| PERSPECTIVE | 친구가 같은 일을 겪었다면, 너는 친구에게 어떤 말을 해 주고 싶니? |
+| EMOTION | 오늘 어떤 일이 있었나요? |
+| REASON | 왜 그런 기분이 들었다고 생각하나요? |
+| PERSPECTIVE | 친구는 그때 어떤 기분이었을까요? |
 
 다시 묻기 기본 질문
 
@@ -179,7 +212,7 @@ M 시리즈 Mac에서 만든 이미지를 x86 서버에 올릴 때는 `docker bu
 ### 타임아웃
 
 - AI 서버는 요청 1건을 질문 약 12초, 리포트 약 25초 안에 끝냄 (재시도 포함)
-- 백엔드 타임아웃은 리포트 30초로 합의함, 질문은 15초 정도 권장
+- 백엔드 타임아웃은 질문 30초, 리포트 30초로 합의함
 
 ## 부적절한 출력 막기
 
@@ -219,8 +252,10 @@ M 시리즈 Mac에서 만든 이미지를 x86 서버에 올릴 때는 `docker bu
 | AI 서버 다운, 타임아웃 시 질문 | 백엔드 디자인 기반 자체 기본 문구 사용 |
 | 리포트 응답 필드 | snake_case, 백엔드가 해당 키로 읽음 |
 | 리포트 503, 타임아웃 | 백엔드가 기본 문구로 대체하고 통계와 함께 반환, 실패 결과는 DB에 저장하지 않음 |
-| AI 기본 질문 문구 | 디자인 기본 문구와 맞추기로 함 |
-| 백엔드 타임아웃 | 리포트 30초 |
+| AI 기본 질문 문구 | 디자인 기본 문구로 맞춤 |
+| 백엔드 타임아웃 | 질문 30초, 리포트 30초 |
+| 빈 답변, "몰라요" 다시 묻기 | 백엔드가 `check` 호출, `retry` 요청, order별 1번 제한까지 반영 완료 |
+| 다시 물은 order의 저장 | 마지막으로 보여 준 질문과 마지막 답변 저장 |
 | 질문 요청 `age`, 리포트 요청 `guardianType` | 추가하지 않음 |
 | 위험 내용 감지 시 도움 안내 | 프론트에 보여 주지 않음 |
 
@@ -230,7 +265,6 @@ M 시리즈 Mac에서 만든 이미지를 x86 서버에 올릴 때는 `docker bu
 
 ## 추후 결정되면 수정할 것
 
-- 디자인 기본 문구를 받으면 AI 기본 질문 문구 교체
 - `trend_title` 생성 여부
 - 응답에 위험 여부를 표시할지
 - 배포 위치, 인증 방식, 백엔드와의 통신 방법
