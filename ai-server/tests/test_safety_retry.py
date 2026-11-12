@@ -182,3 +182,16 @@ def test_safety_rules_in_prompt():
     assert "잘잘못은 어느 쪽으로도 판단하지 않는다" in INSTRUCTIONS
     assert "무서운 마음이 들 수 있어" in INSTRUCTIONS
     assert "그런 일이 있어서 무서웠구나" in INSTRUCTIONS
+
+
+# 고른 감정과 일기가 어울리지 않을 때
+def test_emotion_mismatch_rules_in_prompt():
+    from app.question.prompts import INSTRUCTIONS
+    assert "[고른 감정과 일기가 어울리지 않을 때]" in INSTRUCTIONS
+    assert "골랐네" in INSTRUCTIONS
+    assert "고른 감정이 틀렸다고 말하지 않는다" in INSTRUCTIONS
+
+
+def test_mismatch_style_question_passes_rules():
+    q = "친구랑 싸운 날 기쁨을 골랐네, 어떤 순간에 기쁜 마음이 들었어?"
+    assert validate_question(q, diary="친구랑 싸웠어.") == q
